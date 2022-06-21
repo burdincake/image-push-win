@@ -13,12 +13,19 @@ import ssl
 import os
 from selenium.webdriver.common.by import By
 import imageio.v2 as imageio
+import requests
+import json
+winKey = 8
+macKey = 6
+winSlash = "\\"
+macSlash = "/"
 
 def resource_path(relative_path):
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base_path, relative_path)
 
 ico = resource_path('alpha.ico')
+ssl._create_default_https_context = ssl._create_unverified_context
 chromedriver_autoinstaller.install()
 main_ui = resource_path('main.ui')
 login_ui = resource_path('login.ui')
@@ -27,7 +34,7 @@ mainUI = uic.loadUiType(main_ui)[0]
 webdriver_options = webdriver.ChromeOptions()
 webdriver_options.add_argument('headless')
 webdriver_options.add_argument("--window-size=1920,1080")
-ssl._create_default_https_context = ssl._create_unverified_context
+
 driver = webdriver.Chrome(options=webdriver_options)
 driver.implicitly_wait(5)
 # Headless option
@@ -155,6 +162,7 @@ class mainWindow(QDialog, mainUI):
                 #name = url.split('/')[-1]
                 self.detailList.addItem(url)
             self.consoleLabel.setText("Images updated in \"상품 상세\" list")
+            self.consoleLabel.repaint()
             self.detailCheck.setChecked(True)
 
         def dropEventInfo(e):
@@ -166,6 +174,7 @@ class mainWindow(QDialog, mainUI):
                 # name = url.split('/')[-1]
                 self.infoList.addItem(url)
             self.consoleLabel.setText("Images updated in \"상품 정보고시\" list")
+            self.consoleLabel.repaint()
             self.infoCheck.setChecked(True)
 
         def dropEventThumbnail(e):
@@ -177,6 +186,7 @@ class mainWindow(QDialog, mainUI):
                 # name = url.split('/')[-1]
                 self.thumbnailList.addItem(url)
             self.consoleLabel.setText("Images updated in \"상품 썸네일\" list")
+            self.consoleLabel.repaint()
             self.thumbnailCheck.setChecked(True)
         super().__init__()
         self.setWindowIcon(QIcon('alpha.ico'))
@@ -206,6 +216,7 @@ class mainWindow(QDialog, mainUI):
         items = [str(self.detailList.item(x).text()) for x in range(self.detailList.count())]
         self.detailList.clear()
         self.consoleLabel.setText("이미지들을 재정렬하였습니다")
+        self.consoleLabel.repaint()
         items.sort()
         for item in items:
             self.detailList.addItem(str(item))
@@ -213,17 +224,17 @@ class mainWindow(QDialog, mainUI):
     def showThumbIMG(self):
         w = self.imgLabel.width()
         h = self.imgLabel.height()
-        self.imgLabel.setPixmap(QPixmap(self.thumbnailList.currentItem().text()[8:]).scaled(w, h))
+        self.imgLabel.setPixmap(QPixmap(self.thumbnailList.currentItem().text()[macKey:]).scaled(w, h))
 
     def showInfoIMG(self):
         w = self.imgLabel.width()
         h = self.imgLabel.height()
-        self.imgLabel.setPixmap(QPixmap(self.infoList.currentItem().text()[8:]).scaled(w, h))
+        self.imgLabel.setPixmap(QPixmap(self.infoList.currentItem().text()[macKey:]).scaled(w, h))
 
     def showDetailIMG(self):
         w = self.imgLabel.width()
         h = self.imgLabel.height()
-        self.imgLabel.setPixmap(QPixmap(self.detailList.currentItem().text()[8:]).scaled(w, h))
+        self.imgLabel.setPixmap(QPixmap(self.detailList.currentItem().text()[macKey:]).scaled(w, h))
 
     def reloadClicked(self):
         self.detailList.clear()
@@ -263,7 +274,7 @@ class mainWindow(QDialog, mainUI):
         driver.find_element(By.XPATH, "//a[@href='/itstore/product/list']").click()
         frame = driver.find_element(By.ID, "mainContent")
         driver.switch_to.frame(frame)
-
+        time.sleep(0.4)
         # COUNT PAGES
         page = driver.find_element(By.CLASS_NAME, "pagination")
         li = page.find_elements(By.TAG_NAME, "li")
@@ -303,10 +314,49 @@ class mainWindow(QDialog, mainUI):
             thumbCount = self.thumbnailList.count()
             infoCount = self.infoList.count()
             detailCount = self.detailList.count()
-
+            s = requests.Session()
+            selenium_user_agent = driver.execute_script("return navigator.userAgent;")
+            s.headers.update({"user-agent": selenium_user_agent})
+            for cookie in driver.get_cookies():
+                s.cookies.set(cookie['name'], cookie['value'], domain=cookie['domain'])
+            payload = {"productNo": str(self.codeForm.text()),
+                       "txId": "MODIFY",
+                       "fileTypeCd": "image",
+                       "fileMainClassCd": "product",
+                       "productImagesDT_length": 10,
+                       "commonFileNo": "",
+                       "fileClassCd": "",
+                       "sortNum": ""}
+            payloadUrl = "https://deva.sellable.kr/itstore/product/images?productNo="+str(self.codeForm.text())+"&txId=MODIFY&fileTypeCd=image&fileMainClassCd=product&productImagesDT_length=10&commonFileNo=&fileClassCd=&sortNum="
+            r = s.get(payloadUrl, data=payload)
+            r = r.text.encode('utf-8')
+            a = r.decode('unicode-escape')
+            a = json.loads(str(a))
+            jsonData = a["data"]["contents"]
+            print(a)
+            #상품상세
             if self.detailCheck.isChecked() == True and detailCount != 0:
+                if(jsonData != []):
+                    for Data1 in jsonData:
+                        if(Data1["fileClassCd"] == "mainImg"):
+                            payloadDelete = {
+                                "productNo" : str(Data1["productNo"]),
+                                "txId": "DELETE_PROD_IMAGE",
+                                "fileTypeCd": str(Data1["fileTypeCd"]),
+                                "fileMainClassCd": str(Data1["fileMainClassCd"]),
+                                "productImagesDT_length": str(a["reqParameter"]["productImagesDT_length"]),
+                                "commonFileNo": str(Data1["commonFileNo"]),
+                                "fileClassCd": str(Data1["fileClassCd"]),
+                                "sortNum" : str(Data1["sortNum"]),
+                                "inputFile":"",
+                            }
+                            s.post("https://deva.sellable.kr/itstore/common/file/product",payloadDelete)
                 self.consoleLabel.setText("Now inserting \"상품 상세\" images")
+                self.consoleLabel.repaint()
                 time.sleep(0.5)
+
+
+
                 for i in detail_files:
                     # 정렬순
                     driver.find_element(By.ID, "sortNum").send_keys(Keys.BACKSPACE)
@@ -315,42 +365,72 @@ class mainWindow(QDialog, mainUI):
                     select = Select(driver.find_element(By.ID, "fileClassCd"))
                     select.select_by_visible_text("상품상세")
                     # image send
-                    print("Now sending key -> "+i[8:])
-                    driver.find_element(By.ID, "productImgObject").send_keys(i[8:])
+                    print("Now sending key -> "+i[macKey:])
+                    driver.find_element(By.ID, "productImgObject").send_keys(i[macKey:])
                     driver.find_element(By.ID, "ru_prod_images").click()
                     # 알러트
                     time.sleep(1)
                     Alert(driver).accept()
                     order = order + 1
 
-            # thumbnail
+            #thumbnail
             order = 1
             if self.thumbnailCheck.isChecked() == True and thumbCount == 1:
+                if (jsonData != []):
+                    for Data1 in jsonData:
+                        if (Data1["fileClassCd"] == "thumbnail"):
+                            payloadDelete = {
+                                "productNo": str(Data1["productNo"]),
+                                "txId": "DELETE_PROD_IMAGE",
+                                "fileTypeCd": str(Data1["fileTypeCd"]),
+                                "fileMainClassCd": str(Data1["fileMainClassCd"]),
+                                "productImagesDT_length": str(a["reqParameter"]["productImagesDT_length"]),
+                                "commonFileNo": str(Data1["commonFileNo"]),
+                                "fileClassCd": str(Data1["fileClassCd"]),
+                                "sortNum": str(Data1["sortNum"]),
+                                "inputFile": "",
+                            }
+                            s.post("https://deva.sellable.kr/itstore/common/file/product", payloadDelete)
                 self.consoleLabel.setText("Now inserting \"상품 썸네일\" images")
-                time.sleep(0.5)
+                self.consoleLabel.repaint()
                 # 이미지 구분 selection
                 select = Select(driver.find_element(By.ID, "fileClassCd"))
                 select.select_by_visible_text("상품썸네일")
                 # image send
-                driver.find_element(By.ID, "productImgObject").send_keys(thumb_files[0][8:])
+                driver.find_element(By.ID, "productImgObject").send_keys(thumb_files[0][macKey:])
                 driver.find_element(By.ID, "ru_prod_images").click()
                 # 알러트
                 time.sleep(1)
                 Alert(driver).accept()
                 time.sleep(0.3)
             elif self.thumbnailCheck.isChecked() == True and thumbCount >= 1:
+                if (jsonData != []):
+                    for Data1 in jsonData:
+                        if (Data1["fileClassCd"] == "thumbnail"):
+                            payloadDelete = {
+                                "productNo": str(Data1["productNo"]),
+                                "txId": "DELETE_PROD_IMAGE",
+                                "fileTypeCd": str(Data1["fileTypeCd"]),
+                                "fileMainClassCd": str(Data1["fileMainClassCd"]),
+                                "productImagesDT_length": str(a["reqParameter"]["productImagesDT_length"]),
+                                "commonFileNo": str(Data1["commonFileNo"]),
+                                "fileClassCd": str(Data1["fileClassCd"]),
+                                "sortNum": str(Data1["sortNum"]),
+                                "inputFile": "",
+                            }
+                            s.post("https://deva.sellable.kr/itstore/common/file/product", payloadDelete)
                 images = []
                 for filename in thumb_files:
-                    images.append(imageio.imread(filename[8:]))
+                    images.append(imageio.imread(filename[macKey:]))
                 imageio.mimsave('movie.gif', images, format='GIF', fps=1)
                 # 상품상세
                 self.consoleLabel.setText("Now inserting \"상품 썸네일\" images as GIF")
-                time.sleep(0.5)
+                self.consoleLabel.repaint()
                 # 이미지 구분 selection
                 select = Select(driver.find_element(By.ID, "fileClassCd"))
                 select.select_by_visible_text("상품썸네일")
                 # image send
-                driver.find_element(By.ID, "productImgObject").send_keys(os.getcwd() + "\movie.gif")
+                driver.find_element(By.ID, "productImgObject").send_keys(os.getcwd() + macSlash+"movie.gif")
                 driver.find_element(By.ID, "ru_prod_images").click()
                 # 알러트
                 time.sleep(1)
@@ -360,13 +440,27 @@ class mainWindow(QDialog, mainUI):
             order = 1
             # info
             if self.infoCheck.isChecked() == True and infoCount != 0:
+                if (jsonData != []):
+                    for Data1 in jsonData:
+                        if (Data1["fileClassCd"] == "prodNotice"):
+                            payloadDelete = {
+                                "productNo": str(Data1["productNo"]),
+                                "txId": "DELETE_PROD_IMAGE",
+                                "fileTypeCd": str(Data1["fileTypeCd"]),
+                                "fileMainClassCd": str(Data1["fileMainClassCd"]),
+                                "productImagesDT_length": str(a["reqParameter"]["productImagesDT_length"]),
+                                "commonFileNo": str(Data1["commonFileNo"]),
+                                "fileClassCd": str(Data1["fileClassCd"]),
+                                "sortNum": str(Data1["sortNum"]),
+                                "inputFile": "",
+                            }
+                            s.post("https://deva.sellable.kr/itstore/common/file/product", payloadDelete)
                 self.consoleLabel.setText("Now inserting \"상품 정보공시\" images")
-                time.sleep(0.5)
-                # 이미지 구분 selection
+                self.consoleLabel.repaint()                # 이미지 구분 selection
                 select = Select(driver.find_element(By.ID, "fileClassCd"))
                 select.select_by_visible_text("상품정보고시")
                 # image send
-                driver.find_element(By.ID, "productImgObject").send_keys(info_files[0][8:])
+                driver.find_element(By.ID, "productImgObject").send_keys(info_files[0][macKey:])
                 driver.find_element(By.ID, "ru_prod_images").click()
                 # 알러트
                 time.sleep(1)
@@ -375,6 +469,7 @@ class mainWindow(QDialog, mainUI):
         if(run):
             runImgAdd()
             self.consoleLabel.setText("Insertion Complete")
+            self.consoleLabel.repaint()
 
 if __name__ == "__main__" :
     app = QApplication(sys.argv)
