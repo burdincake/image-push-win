@@ -17,8 +17,10 @@ import requests
 import json
 winKey = 8
 macKey = 6
+osKey = winKey
 winSlash = "\\"
 macSlash = "/"
+osSlash = winSlash
 
 def resource_path(relative_path):
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
@@ -96,21 +98,21 @@ class loginWindow(QDialog, loginUI) :
         self.label_2.repaint()
         while(load == False):
             try:
-                print("trying")
+                print("로그인 후 해쉬값 추출시도")
                 driver.find_element(By.CLASS_NAME,"dropdown-toggle")
                 self.hide()
                 self.second = mainWindow()
                 self.second.exec()
-                print("True")
+                print("추출 성공")
             except:
                 try:
                     alert = driver.switch_to.alert
                     alert.accept()
                     load = True
-                    print("Alert Accepted")
+                    print("알러트 승인")
                     self.label_2.setText("Password or ID is incorrect")
                 except:
-                    print("No alert")
+                    print("알러트 x")
         driver.implicitly_wait(5)
 
     def loginDev(self):
@@ -123,22 +125,22 @@ class loginWindow(QDialog, loginUI) :
         self.label_2.repaint()
         while(load == False):
             try:
-                print("trying")
+                print("해쉬 추출 시도")
                 driver.find_element(By.CLASS_NAME,"dropdown-toggle")
                 load = True
                 self.hide()
                 self.second = mainWindow()
                 self.second.exec()
-                print("True")
+                print("해쉬 추출 성공")
             except:
                 try:
                     alert = driver.switch_to.alert
                     alert.accept()
                     load = True
-                    print("Alert Accepted")
+                    print("알러트 승인")
                     self.label_2.setText("Password or ID is incorrect")
                 except:
-                    print("No alert")
+                    print("알러트 x")
         driver.implicitly_wait(5)
 
 class mainWindow(QDialog, mainUI):
@@ -150,7 +152,7 @@ class mainWindow(QDialog, mainUI):
             elif e.mimeData().hasUrls:
                 e.accept()
             else:
-                print("noIMG")
+                print("이미지x")
                 super(QListWidget,self.detailList).dragEnterEvent(e);
 
         def dropEventDetail(e):
@@ -206,7 +208,6 @@ class mainWindow(QDialog, mainUI):
         self.thumbnailList.itemClicked.connect(self.showThumbIMG)
         self.infoList.itemClicked.connect(self.showInfoIMG)
         self.orderButton.clicked.connect(self.orderSwitch)
-        print(driver.current_url)
         if driver.current_url == "https://deva.sellable.kr/itstore/main":
             self.setWindowTitle("개발-테스트 접속됨")
         else:
@@ -224,17 +225,17 @@ class mainWindow(QDialog, mainUI):
     def showThumbIMG(self):
         w = self.imgLabel.width()
         h = self.imgLabel.height()
-        self.imgLabel.setPixmap(QPixmap(self.thumbnailList.currentItem().text()[macKey:]).scaled(w, h))
+        self.imgLabel.setPixmap(QPixmap(self.thumbnailList.currentItem().text()[osKey:]).scaled(w, h))
 
     def showInfoIMG(self):
         w = self.imgLabel.width()
         h = self.imgLabel.height()
-        self.imgLabel.setPixmap(QPixmap(self.infoList.currentItem().text()[macKey:]).scaled(w, h))
+        self.imgLabel.setPixmap(QPixmap(self.infoList.currentItem().text()[osKey:]).scaled(w, h))
 
     def showDetailIMG(self):
         w = self.imgLabel.width()
         h = self.imgLabel.height()
-        self.imgLabel.setPixmap(QPixmap(self.detailList.currentItem().text()[macKey:]).scaled(w, h))
+        self.imgLabel.setPixmap(QPixmap(self.detailList.currentItem().text()[osKey:]).scaled(w, h))
 
     def reloadClicked(self):
         self.detailList.clear()
@@ -256,7 +257,7 @@ class mainWindow(QDialog, mainUI):
         if(self.thumbnailCheck.isChecked() == False and self.infoCheck.isChecked() == False and self.detailCheck.isChecked()==False):
             self.consoleLabel.setText("No Items are Checked")
             self.consoleLabel.repaint()
-            print("No items checked")
+            print("--No Item Selected--")
             return None
         try:
             self.consoleLabel.setText("Searching...")
@@ -327,13 +328,16 @@ class mainWindow(QDialog, mainUI):
                        "commonFileNo": "",
                        "fileClassCd": "",
                        "sortNum": ""}
-            payloadUrl = "https://deva.sellable.kr/itstore/product/images?productNo="+str(self.codeForm.text())+"&txId=MODIFY&fileTypeCd=image&fileMainClassCd=product&productImagesDT_length=10&commonFileNo=&fileClassCd=&sortNum="
+            if("https://deva" == driver.current_url[0:12]):
+                payloadUrl = "https://deva.sellable.kr/itstore/product/images?productNo="+str(self.codeForm.text())+"&txId=MODIFY&fileTypeCd=image&fileMainClassCd=product&productImagesDT_length=10&commonFileNo=&fileClassCd=&sortNum="
+            else:
+                payloadUrl = "https://admin.sellable.kr/itstore/product/images?productNo="+str(self.codeForm.text())+"&txId=MODIFY&fileTypeCd=image&fileMainClassCd=product&productImagesDT_length=10&commonFileNo=&fileClassCd=&sortNum="
             r = s.get(payloadUrl, data=payload)
             r = r.text.encode('utf-8')
             a = r.decode('unicode-escape')
             a = json.loads(str(a))
             jsonData = a["data"]["contents"]
-            print(a)
+            print(jsonData)
             #상품상세
             if self.detailCheck.isChecked() == True and detailCount != 0:
                 if(jsonData != []):
@@ -350,7 +354,11 @@ class mainWindow(QDialog, mainUI):
                                 "sortNum" : str(Data1["sortNum"]),
                                 "inputFile":"",
                             }
-                            s.post("https://deva.sellable.kr/itstore/common/file/product",payloadDelete)
+                            if ("https://deva" == driver.current_url[0:12]):
+                                url = "https://deva.sellable.kr/itstore/common/file/product"
+                            else:
+                                url = "https://admin.sellable.kr/itstore/common/file/product"
+                            s.post(url,payloadDelete)
                 self.consoleLabel.setText("Now inserting \"상품 상세\" images")
                 self.consoleLabel.repaint()
                 time.sleep(0.5)
@@ -365,8 +373,8 @@ class mainWindow(QDialog, mainUI):
                     select = Select(driver.find_element(By.ID, "fileClassCd"))
                     select.select_by_visible_text("상품상세")
                     # image send
-                    print("Now sending key -> "+i[macKey:])
-                    driver.find_element(By.ID, "productImgObject").send_keys(i[macKey:])
+                    print("Now sending key -> "+i[osKey:])
+                    driver.find_element(By.ID, "productImgObject").send_keys(i[osKey:])
                     driver.find_element(By.ID, "ru_prod_images").click()
                     # 알러트
                     time.sleep(1)
@@ -390,14 +398,18 @@ class mainWindow(QDialog, mainUI):
                                 "sortNum": str(Data1["sortNum"]),
                                 "inputFile": "",
                             }
-                            s.post("https://deva.sellable.kr/itstore/common/file/product", payloadDelete)
+                            if ("https://deva" == driver.current_url[0:12]):
+                                url = "https://deva.sellable.kr/itstore/common/file/product"
+                            else:
+                                url = "https://admin.sellable.kr/itstore/common/file/product"
+                            s.post(url,payloadDelete)
                 self.consoleLabel.setText("Now inserting \"상품 썸네일\" images")
                 self.consoleLabel.repaint()
                 # 이미지 구분 selection
                 select = Select(driver.find_element(By.ID, "fileClassCd"))
                 select.select_by_visible_text("상품썸네일")
                 # image send
-                driver.find_element(By.ID, "productImgObject").send_keys(thumb_files[0][macKey:])
+                driver.find_element(By.ID, "productImgObject").send_keys(thumb_files[0][osKey:])
                 driver.find_element(By.ID, "ru_prod_images").click()
                 # 알러트
                 time.sleep(1)
@@ -418,10 +430,14 @@ class mainWindow(QDialog, mainUI):
                                 "sortNum": str(Data1["sortNum"]),
                                 "inputFile": "",
                             }
-                            s.post("https://deva.sellable.kr/itstore/common/file/product", payloadDelete)
+                            if ("https://deva" == driver.current_url[0:12]):
+                                url = "https://deva.sellable.kr/itstore/common/file/product"
+                            else:
+                                url = "https://admin.sellable.kr/itstore/common/file/product"
+                            s.post(url,payloadDelete)
                 images = []
                 for filename in thumb_files:
-                    images.append(imageio.imread(filename[macKey:]))
+                    images.append(imageio.imread(filename[osKey:]))
                 imageio.mimsave('movie.gif', images, format='GIF', fps=1)
                 # 상품상세
                 self.consoleLabel.setText("Now inserting \"상품 썸네일\" images as GIF")
@@ -430,7 +446,7 @@ class mainWindow(QDialog, mainUI):
                 select = Select(driver.find_element(By.ID, "fileClassCd"))
                 select.select_by_visible_text("상품썸네일")
                 # image send
-                driver.find_element(By.ID, "productImgObject").send_keys(os.getcwd() + macSlash+"movie.gif")
+                driver.find_element(By.ID, "productImgObject").send_keys(os.getcwd() + osSlash+"movie.gif")
                 driver.find_element(By.ID, "ru_prod_images").click()
                 # 알러트
                 time.sleep(1)
@@ -454,13 +470,17 @@ class mainWindow(QDialog, mainUI):
                                 "sortNum": str(Data1["sortNum"]),
                                 "inputFile": "",
                             }
-                            s.post("https://deva.sellable.kr/itstore/common/file/product", payloadDelete)
+                            if ("https://deva" == driver.current_url[0:12]):
+                                url = "https://deva.sellable.kr/itstore/common/file/product"
+                            else:
+                                url = "https://admin.sellable.kr/itstore/common/file/product"
+                            s.post(url,payloadDelete)
                 self.consoleLabel.setText("Now inserting \"상품 정보공시\" images")
                 self.consoleLabel.repaint()                # 이미지 구분 selection
                 select = Select(driver.find_element(By.ID, "fileClassCd"))
                 select.select_by_visible_text("상품정보고시")
                 # image send
-                driver.find_element(By.ID, "productImgObject").send_keys(info_files[0][macKey:])
+                driver.find_element(By.ID, "productImgObject").send_keys(info_files[0][osKey:])
                 driver.find_element(By.ID, "ru_prod_images").click()
                 # 알러트
                 time.sleep(1)
